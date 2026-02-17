@@ -36,6 +36,19 @@ def upload_media(file_path):
     api_url = f"{url}/wp-json/wp/v2/media"
     headers = get_auth_header()
     
+    # 檢查圖片是否已存在
+    filename = os.path.basename(file_path)
+    slug = os.path.splitext(filename)[0]
+    try:
+        check_response = requests.get(api_url, headers=headers, params={'slug': slug})
+        if check_response.status_code == 200:
+            existing_media = check_response.json()
+            if existing_media:
+                print(f"圖片已存在，跳過上傳: {filename} (ID: {existing_media[0]['id']})")
+                return existing_media[0]
+    except Exception as e:
+        print(f"檢查圖片重複失敗: {e}")
+
     # 準備檔案與標頭
     mime_type, _ = mimetypes.guess_type(file_path)
     if mime_type is None:
@@ -57,6 +70,29 @@ def upload_media(file_path):
         print(f"圖片上傳成功！ID: {media_item['id']}")
         return media_item
 
+def create_post(title, content, featured_media_id=None):
+    """建立 WordPress 文章草稿"""
+    url = os.environ.get('WP_URL')
+    if not url:
+        print("錯誤：請設定 WP_URL 環境變數。")
+        sys.exit(1)
+
+    api_url = f"{url}/wp-json/wp/v2/posts"
+    headers = get_auth_header()
+    
+    post_data = {
+        'title': title,
+        'content': content,
+        'status': 'draft'
+    }
+    
+    if featured_media_id:
+        post_data['featured_media'] = featured_media_id
+        
+    print(f"正在建立文章草稿: {title} ...")
+    response = requests.post(api_url, headers=headers, json=post_data)
+    response.raise_for_status()
+    return response.json()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='發布文章到 WordPress')
@@ -68,6 +104,7 @@ if __name__ == "__main__":
 
     # 處理內容
     final_content = args.content
+    featured_media_id = None
 
     # 1. 處理圖片目錄 (批次上傳並建立畫廊)
     if args.image_dir:
@@ -80,23 +117,32 @@ if __name__ == "__main__":
             print(f"發現 {len(image_files)} 張圖片，準備上傳並建立畫廊...")
             gallery_html = '<!-- wp:gallery {"linkTo":"none"} --><figure class="wp-block-gallery has-nested-images columns-default is-cropped">'
             for img_path in sorted(image_files):
-                media_data = upload_media(img_path)
-                gallery_html += f'<!-- wp:image {{"id":{media_data["id"]},"sizeSlug":"large","linkDestination":"none"}} --><figure class="wp-block-image size-large"><img src="{media_data["source_url"]}" alt="" class="wp-image-{media_data["id"]}"/></figure><!-- /wp:image -->'
+                try:
+                    media_data = upload_media(img_path)
+                    gallery_html += f'<!-- wp:image {{"id":{media_data["id"]},"sizeSlug":"large","linkDestination":"none"}} --><figure class="wp-block-image size-large"><img src="{media_data["source_url"]}" alt="" class="wp-image-{media_data["id"]}"/></figure><!-- /wp:image -->'
+                except Exception as e:
+                    print(f"上傳圖片失敗 {img_path}: {e}")
             gallery_html += '</figure><!-- /wp:gallery -->'
             final_content += gallery_html
 
     # 2. 處理精選圖片 (封面圖)
-    # The publish_post function has been removed. User will manually add featured image.
     if args.featured_image:
-        print(f"請注意：已上傳精選圖片 '{args.featured_image}'，其 ID 為 {upload_media(args.featured_image)['id']}。")
-        print("請在 WordPress 編輯器中手動設定此圖片為文章的精選圖片。")
+        try:
+            media_data = upload_media(args.featured_image)
+            featured_media_id = media_data['id']
+            print(f"精選圖片上傳成功，ID: {featured_media_id}")
+        except Exception as e:
+            print(f"上傳精選圖片失敗: {e}")
 
-    print("\n--- 請複製以下內容到您的 WordPress 網站後台 (文字模式或自訂 HTML 區塊) ---\n")
-    print(f"文章標題: {args.title}")
-    print("\n--- 文章內容 ---\n")
-    print(final_content)
-    print("\n--------------------------------------------------------------------------\n")
-    print("請將上述「文章標題」貼至 WordPress 編輯器的標題欄位。")
-    print("將「文章內容」完整貼至 WordPress 編輯器的「文字模式」或「自訂 HTML 區塊」。")
-    print("圖片已上傳至您的媒體庫，您可以在編輯器中手動插入或設定特色圖片。")
-    print("發布前請務必在 WordPress 後台預覽文章，確認排版無誤後再發布。")
+    # 3. 建立文章草稿
+    try:
+        post = create_post(args.title, final_content, featured_media_id)
+        print(f"\n✅ 文章草稿建立成功！")
+        print(f"文章 ID: {post['id']}")
+        print(f"預覽連結: {post['link']}")
+        print(f"編輯連結: {os.environ.get('WP_URL')}/wp-admin/post.php?post={post['id']}&action=edit")
+    except Exception as e:
+        print(f"\n❌ 建立文章失敗: {e}")
+        # 如果失敗，還是印出內容供手動貼上
+        print("\n--- 備份：文章 HTML 內容 ---\n")
+        print(final_content)

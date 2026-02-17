@@ -16,7 +16,7 @@ description: 專門生成符合「愛旅行的工程師」風格的旅遊部落�
 ## 寫作指南 (Writing Guide)
 
 ### 排版規範
-- **標題**: `【地點】主標題｜副標題`
+- **標題**: `【地點】主標題｜副標題` (範例：`【峇里島住宿】努沙杜瓦萬怡酒店 Courtyard by Marriott Bali Nusa Dua Resort｜陽台直通泳池的度假體驗`)
 - **重點**: 使用 `<mark style="background-color:rgba(0, 0, 0, 0);color:#41a8bf" class="has-inline-color">重點文字</mark>`
 - **小標題**: `<!-- wp:heading {"level":3,"backgroundColor":"medium-gray","textColor":"white","fontSize":"small"} -->`
 - **清單**: 使用 `<!-- wp:quote -->` 包覆 `<!-- wp:list -->` 作為懶人包。
@@ -49,6 +49,13 @@ python blog-generator/scripts/publish_to_wordpress.py \
   --content "$(cat blog-generator/blog_content.html)" \
   --featured_image "blog-generator/photos/trip_name/cover.jpg" \
   --image_dir "blog-generator/photos/trip_name"
+```
+#### 範例：
+```bash
+python blog-generator/scripts/publish_to_wordpress.py \
+  --title "后里環保公園野餐趣" \
+  --content "$(cat blog-generator/blog_content.html)" \
+  --image_dir "blog-generator/photos/houli_picnic"
 ```
 
 ## 操作限制 (Operational Constraints)
