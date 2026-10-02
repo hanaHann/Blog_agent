@@ -3,3 +3,10 @@ __pycache__/
 *.pyc
 .DS_Store
 photos/
+
+# 本機環境
+.venv/
+*.bak
+
+# 每趟旅程的照片、訪談紀錄、草稿（個人資料，不上傳）
+trips/
