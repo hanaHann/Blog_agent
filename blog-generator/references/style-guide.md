@@ -155,6 +155,24 @@ mark 用來標**真正的重點或可以帶走的建議**，一篇用 3～8 處�
 ```
 如果使用者有提供 Google Maps「分享 → 嵌入地圖」的網址，就改用那個網址。
 
+### 連結（參考【哈爾濱】八天七夜…懶人包＆避雷攻略那篇）
+- **不要用 icon**（👉、➡️ 等），也**不要出現藍字連結**。連結顏色設定成和內文一樣的黑色。
+- **文中引用其他文章**：用「XX請參考：」開頭，後面接**完整的文章標題**當連結文字，開新分頁：
+```html
+<!-- wp:paragraph {"style":{"elements":{"link":{"color":{"text":"#000000"}}}}} -->
+<p class="has-link-color">四天三夜的完整行程與心得請參考：<a href="文章網址" target="_blank" rel="noreferrer noopener">【馬祖】完整文章標題</a></p>
+<!-- /wp:paragraph -->
+```
+- **總覽連到每日文章**：DAY 小標本身就是連結，段落下方再放一行置中、粗體的「閱讀當日詳細圖文日誌」：
+```html
+<!-- wp:paragraph {"align":"center","style":{"elements":{"link":{"color":{"text":"#000000"}}}}} -->
+<p class="has-text-align-center has-link-color"><strong><a href="文章網址" target="_blank" rel="noreferrer noopener">閱讀當日詳細圖文日誌</a></strong></p>
+<!-- /wp:paragraph -->
+```
+  小標裡的連結顏色要和小標的字色一樣：在小標的 `style` 加 `"elements":{"link":{"color":{"text":"小標字色"}}}`，class 加 `has-link-color`。
+- **每日文章**：不放「回到總覽」「上一篇／下一篇」這類按鈕。需要提到其他篇時，在文中用上面的引用格式。
+- 還沒發佈的草稿，網址用 `https://thedayisthelastday.com/?p=文章ID`，發佈後會自動導到正式網址。
+
 ### 照片（佔位語法，由 `blog.py` 轉成區塊）
 每個佔位要**單獨一行**，檔名寫旅程資料夾裡的原始檔名：
 ```
@@ -178,6 +196,11 @@ mark 用來標**真正的重點或可以帶走的建議**，一篇用 3～8 處�
 寫法：`<!-- wp:block {"ref":480} /-->`
 
 ---
+
+### 廣告
+- **不用在文章裡放廣告區塊**。網站搬家後改用 Google AdSense 自動廣告（透過 Site Kit 外掛載入），廣告會自動出現。
+- 舊文章裡的 `<!-- wp:jetpack/wordads /-->` 是 WordPress.com 時期的 WordAds，現在網站沒有開啟 WordAds，**不要再插入**。
+- 如果使用者之後提供 AdSense 廣告單元的代碼，再照舊文章的位置插入：大約在第 2 個小標前、文章中段、結尾前各放一個。
 
 ## 5. 分類與標籤
 - 露營：分類用「露營」，再加上地區分類，例如「新竹露營」、「苗栗露營」、「桃園露營」、「台中露營」。

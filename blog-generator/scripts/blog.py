@@ -285,6 +285,7 @@ img{max-width:100%;height:auto;display:block}
 .has-medium-gray-background-color{background:#6d6d6d}.has-white-color{color:#fff}.has-black-color{color:#000}
 table{border-collapse:collapse;width:100%}td{border:1px solid #ccc;padding:6px 10px;vertical-align:top}
 .missing{background:#fff3cd;padding:2px 4px}
+.has-link-color a{color:#000}
 .reusable{color:#888;border:1px dashed #bbb;padding:6px 12px;font-size:14px}
 @media (max-width:600px){.wp-block-media-text{grid-template-columns:1fr}.wp-block-media-text.has-media-on-the-right .wp-block-media-text__media{order:0}}
 """
