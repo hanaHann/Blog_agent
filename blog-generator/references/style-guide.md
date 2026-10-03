@@ -149,10 +149,11 @@ mark 用來標**真正的重點或可以帶走的建議**，一篇用 3～8 處�
 ### Google 地圖
 預設用不需要 API key 的嵌入網址，`q=` 後面放地點名稱並做 URL 編碼：
 ```html
-<!-- wp:paragraph -->
-<p><iframe src="https://www.google.com/maps?q=%E9%AC%BC%E6%BE%A4157%E9%9C%B2%E7%87%9F%E5%8D%80&output=embed" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></p>
-<!-- /wp:paragraph -->
+<!-- wp:html -->
+<iframe src="https://www.google.com/maps?q=%E9%AC%BC%E6%BE%A4157%E9%9C%B2%E7%87%9F%E5%8D%80&output=embed" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+<!-- /wp:html -->
 ```
+**一定要用 `wp:html`（自訂 HTML）區塊，不要包在 `wp:paragraph` 裡**：段落區塊在編輯器裡顯示不了 iframe，使用者在後台看不到地圖，一編輯就會被清掉（宮古島海灘篇、美食篇踩過這個雷）。
 如果使用者有提供 Google Maps「分享 → 嵌入地圖」的網址，就改用那個網址。
 
 ### 連結（參考【哈爾濱】八天七夜…懶人包＆避雷攻略那篇）
@@ -180,6 +181,7 @@ mark 用來標**真正的重點或可以帶走的建議**，一篇用 3～8 處�
 [[media-text: IMG_004.jpg | 一兩句圖說，像在跟讀者指著照片講話。 | left]]
 [[image: IMG_005.jpg | 替代文字]]
 ```
+- `gallery` 發佈後是 Jetpack「並排圖庫」，依照片比例自動排成拼貼（直式、橫式混放效果最好）。
 - `gallery` 放 **2～3 張**。同一個場景有 4～5 張時，可以放一組 4～5 張，但很少用。
 - `media-text` 用在**一張照片配一兩句圖說**，例如貓咪來訪、狼狽的模樣。圖片位置在 left 和 right 之間輪流。
 - `image` 只用在需要單張大圖的時候，例如推薦指數下面的那張。

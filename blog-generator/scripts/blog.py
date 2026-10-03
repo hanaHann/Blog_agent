@@ -16,7 +16,7 @@
         .processed/ .thumbs/ .uploads.json preview.html  （腳本產生）
 
 post.html 中的照片佔位語法（每個佔位單獨一行，檔名為旅程資料夾裡的原始檔名）：
-    [[gallery: a.jpg, b.HEIC, c.jpg]]
+    [[gallery: a.jpg, b.HEIC, c.jpg]]          # 產生 Jetpack 並排圖庫（tiled-gallery）
     [[media-text: a.jpg | 圖說文字 | left]]     # left/right 為圖片位置，預設 left
     [[image: a.jpg | 替代文字]]
 """
@@ -222,13 +222,14 @@ def contact_sheets(trip, index, cols=4, rows=3, cell=420):
 
 # ---------- 佔位 -> HTML ----------
 
-def render(trip, content, image_for):
-    """把 [[...]] 佔位換成區塊。image_for(src_path) 回傳 {'id','url','alt'}。"""
+def render(trip, content, image_for, photon=True):
+    """把 [[...]] 佔位換成區塊。image_for(src_path) 回傳 {'id','url','alt','width','height','link'}。
+    gallery 一律產生 Jetpack 並排圖庫；photon=False 時（本機預覽）圖片不走 Jetpack CDN。"""
     def repl(m):
         kind, opts = m.group(1), parse_placeholder(m.group(1), m.group(2))
         imgs = [image_for(find_photo(trip, f)) for f in opts["files"]]
         if kind == "gallery":
-            return gallery_block(imgs)
+            return tiled_gallery_block(imgs, photon=photon)
         if kind == "media-text":
             return media_text_block(imgs[0], opts["text"], opts["position"])
         return image_block(imgs[0], opts["alt"] or imgs[0].get("alt", ""))
@@ -246,12 +247,121 @@ def image_block(img, alt=None):
     return f"<!-- wp:image {attrs} -->\n{image_inner(img, alt)}\n<!-- /wp:image -->"
 
 
-def gallery_block(imgs):
-    cols = min(len(imgs), 3)
-    inner = "\n\n".join(image_block(i) for i in imgs)
-    return (f'<!-- wp:gallery {{"columns":{cols},"linkTo":"none"}} -->\n'
-            f'<figure class="wp-block-gallery has-nested-images columns-{cols} is-cropped">{inner}</figure>\n'
-            f'<!-- /wp:gallery -->')
+# ---------- Jetpack 並排圖庫（tiled-gallery，矩形樣式）----------
+# 移植自 Jetpack extensions/blocks/tiled-gallery/layout/mosaic/{ratios,resize}.js。
+# 區塊的 HTML 必須和 Jetpack 編輯器存出來的一模一樣，否則編輯器會顯示「區塊內容無效」，
+# 所以列與欄的分法要照 ratiosToMosaicRows 的規則算。
+
+TILED_GUTTER = 4
+TILED_EDITOR_WIDTH = 695  # 編輯器裡相簿的寬度（px），只影響欄寬百分比的小數
+
+
+def _landscape(r): return 1 <= r < 2
+def _portrait(r): return r < 1
+def _mid(r): return 0.9 <= r < 2
+
+
+def _fits(preds, ratios):
+    return len(ratios) >= len(preds) and all(p(r) for p, r in zip(preds, ratios))
+
+
+def _not_recent(shape, n, processed):
+    return shape not in processed[-n:]
+
+
+def mosaic_rows(ratios, is_wide=False):
+    """回傳每一列的欄位分法，例如 [[1, 2], [1, 1, 1]]（數字是該欄疊幾張）。"""
+    L, P = _landscape, _portrait
+    rows, rest = [], list(ratios)
+    while rest:
+        n = len(rest)
+        if n > 15 and _fits([L, L, P, L, L], rest) and _not_recent([2, 1, 2], 5, rows):
+            nxt = [2, 1, 2]
+        elif n > 15 and _fits([L, L, L, P, L, L, L], rest) and _not_recent([3, 1, 3], 5, rows):
+            nxt = [3, 1, 3]
+        elif n != 5 and _fits([P, L, L, P], rest) and _not_recent([1, 2, 1], 5, rows):
+            nxt = [1, 2, 1]
+        elif _fits([P, L, L, L], rest) and _not_recent([1, 3], 3, rows):
+            nxt = [1, 3]
+        elif _fits([L, L, L, P], rest) and _not_recent([3, 1], 3, rows):
+            nxt = [3, 1]
+        elif _fits([lambda r: r < 1.6, _mid, _mid], rest) and _not_recent([1, 2], 3, rows):
+            nxt = [1, 2]
+        elif (is_wide and (n == 5 or (n != 10 and n > 6)) and _not_recent([1] * 5, 1, rows)
+              and sum(rest[:5]) < 5):
+            nxt = [1] * 5
+        elif ((_not_recent([1] * 4, 1, rows) and sum(rest[:4]) < 3.5 and n > 5)
+              or (sum(rest[:4]) < 7 and n == 4)):
+            nxt = [1] * 4
+        elif (n >= 3 and n not in (4, 6) and _not_recent([1] * 3, 3, rows)
+              and (sum(rest[:3]) < 2.5 or (sum(rest[:3]) < 5 and rest[0] == rest[2]) or is_wide)):
+            nxt = [1] * 3
+        elif _fits([_mid, _mid, lambda r: r < 1.6], rest) and _not_recent([2, 1], 3, rows):
+            nxt = [2, 1]
+        elif _fits([lambda r: r >= 2], rest):
+            nxt = [1]
+        elif n > 3:
+            nxt = [1, 1]
+        else:
+            nxt = [1] * n
+        rows.append(nxt)
+        rest = rest[sum(nxt):]
+    return rows
+
+
+def _col_ratio(ratios):
+    return 1 / sum(1 / r for r in ratios)
+
+
+def row_widths(cols, width=TILED_EDITOR_WIDTH):
+    """cols 是這一列每欄的圖片比例清單，回傳每欄寬度百分比（字串，5 位小數）。"""
+    col_r = [_col_ratio(c) for c in cols]
+    ratio = sum(col_r)
+    weighted = sum(r * len(c) for r, c in zip(col_r, cols))
+    avail = width - TILED_GUTTER * (len(cols) - 1)
+    raw_h = (avail - weighted) / ratio
+    widths = [(raw_h - TILED_GUTTER * (len(c) - 1)) * r for r, c in zip(col_r, cols)]
+    diff = (avail - sum(widths)) / len(widths)
+    return [f"{(w + diff) / avail * 100:.5f}" for w in widths]
+
+
+def photon_url(url):
+    """Jetpack 圖片 CDN 網址，和編輯器存檔時產生的一樣。"""
+    return "https://i0.wp.com/" + re.sub(r"^https?://", "", url.split("?", 1)[0]) + "?ssl=1"
+
+
+def attr_escape(text):
+    """照 WordPress 區塊編輯器的方式跳脫屬性值（撇號不跳脫）。"""
+    return html.escape(text, quote=False).replace('"', "&quot;")
+
+
+def tiled_gallery_block(imgs, photon=True):
+    ratios = [(i["width"] / i["height"]) if i.get("width") and i.get("height") else 1 for i in imgs]
+    rows = mosaic_rows(ratios)
+    col_widths, row_html, k = [], [], 0
+    for row in rows:
+        cols = []
+        for size in row:
+            cols.append(list(range(k, k + size)))
+            k += size
+        widths = row_widths([[ratios[i] for i in c] for c in cols])
+        col_widths.append(widths)
+        cells = []
+        for c, w in zip(cols, widths):
+            figs = "".join(
+                f'<figure class="tiled-gallery__item"><img alt="{attr_escape(imgs[i].get("alt", ""))}"'
+                f' data-height="{imgs[i].get("height", "")}" data-id="{imgs[i].get("id") or ""}"'
+                f' data-link="{imgs[i].get("link", "")}" data-url="{imgs[i]["url"]}"'
+                f' data-width="{imgs[i].get("width", "")}"'
+                f' src="{photon_url(imgs[i]["url"]) if photon else imgs[i]["url"]}" data-amp-layout="responsive"/></figure>'
+                for i in c)
+            cells.append(f'<div class="tiled-gallery__col" style="flex-basis:{w}%">{figs}</div>')
+        row_html.append(f'<div class="tiled-gallery__row">{"".join(cells)}</div>')
+    attrs = {"columns": min(len(imgs), 3), "columnWidths": col_widths, "ids": [i.get("id") for i in imgs]}
+    return (f'<!-- wp:jetpack/tiled-gallery {json.dumps(attrs, separators=(",", ":"))} -->\n'
+            f'<div class="wp-block-jetpack-tiled-gallery aligncenter is-style-rectangular"><div class="">'
+            f'<div class="tiled-gallery__gallery">{"".join(row_html)}</div></div></div>\n'
+            f'<!-- /wp:jetpack/tiled-gallery -->')
 
 
 def media_text_block(img, text, position):
@@ -278,6 +388,10 @@ img{max-width:100%;height:auto;display:block}
 .wp-block-gallery{display:grid;grid-template-columns:repeat(var(--cols),1fr);gap:8px;margin:16px 0}
 .wp-block-gallery img{width:100%;height:240px;object-fit:cover}
 .wp-block-gallery figure,.wp-block-image{margin:0}
+.tiled-gallery__gallery{margin:16px 0}
+.tiled-gallery__row{display:flex;gap:4px;margin-bottom:4px}
+.tiled-gallery__col{display:flex;flex-direction:column;gap:4px;min-width:0}
+.tiled-gallery__item{margin:0;flex:1}.tiled-gallery__item img{width:100%;height:100%;object-fit:cover}
 .wp-block-media-text{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:center;margin:16px 0}
 .wp-block-media-text.has-media-on-the-right .wp-block-media-text__media{order:2}
 .wp-block-media-text figure{margin:0}
@@ -302,9 +416,12 @@ def cmd_preview(trip):
         p = trip / ".processed" / processed_name(src)
         if not p.exists():
             sips_convert(src, p, UPLOAD_MAX_PX, 85)
-        return {"id": None, "url": os.path.relpath(p, trip), "alt": photo_desc(meta, src)}
+        from PIL import Image
+        with Image.open(p) as im:
+            w, h = im.size
+        return {"id": None, "url": os.path.relpath(p, trip), "alt": photo_desc(meta, src), "width": w, "height": h}
 
-    body = render(trip, content, local)
+    body = render(trip, content, local, photon=False)
     body = re.sub(r'(<figure class="wp-block-gallery[^"]*columns-(\d)[^"]*")', r'\1 style="--cols:\2"', body)
     body = re.sub(r'<!-- wp:block \{"ref":(\d+)\} /-->', r'<div class="reusable">［可重複使用區塊 #\1，發佈後由 WordPress 顯示］</div>', body)
     body = body.replace("[待補]", '<span class="missing">[待補]</span>')
@@ -351,8 +468,14 @@ class WP:
         with open(path, "rb") as f:
             m = self.call("POST", "media", data=f, headers={
                 "Content-Disposition": f'attachment; filename="{filename}"', "Content-Type": "image/jpeg"})
-        large = m.get("media_details", {}).get("sizes", {}).get("large", {}).get("source_url")
-        return {"id": m["id"], "url": large or m["source_url"]}
+        return self.media_info(m)
+
+    def media_info(self, m):
+        """媒體資料 -> 文章用的欄位。width/height 是原圖尺寸，並排圖庫用來排版。"""
+        details = m.get("media_details", {})
+        large = details.get("sizes", {}).get("large", {}).get("source_url")
+        return {"id": m["id"], "url": large or m["source_url"], "width": details.get("width"),
+                "height": details.get("height"), "link": m.get("link", "")}
 
     def describe(self, media_id, desc):
         """把照片描述寫進媒體庫的替代文字、標題、說明。"""
@@ -405,6 +528,11 @@ def cmd_publish(trip, force, allow_missing):
             cache[src.name] = wp.upload(p, name)
             save_cache()
         item = cache[src.name]
+        if not item.get("width") or "link" not in item:
+            # 舊版快取沒有記尺寸和附件頁連結，補抓一次
+            info = wp.media_info(wp.call("GET", f"media/{item['id']}"))
+            item.update({k: info[k] for k in ("width", "height", "link")})
+            save_cache()
         desc = photo_desc(meta, src)
         if desc and item.get("alt") != desc:
             wp.describe(item["id"], desc)
@@ -466,7 +594,7 @@ def cmd_pull(trip):
 def cmd_site():
     wp = WP()
     cats = wp.call("GET", "categories", params={"per_page": 100})
-    print("分類：" + "、".join(f"{html.unescape(c['name'])}({c['count']})" for c in cats if c["count"]))
+    print("分類：" + "、".join(f"{html.unescape(c['name'])}({c['count']})" for c in cats))
     tags = wp.call("GET", "tags", params={"per_page": 60, "orderby": "count", "order": "desc"})
     print("常用標籤：" + "、".join(f"{html.unescape(t['name'])}({t['count']})" for t in tags))
 
